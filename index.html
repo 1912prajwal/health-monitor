@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ESP32 Health Monitor - Live Demo</title>
+<title>ESP32 Health Monitor - Live Output</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <style>
@@ -60,6 +60,45 @@ h1{
 @keyframes pulse {
     0%, 100% { box-shadow:0 0 5px rgba(0,255,0,0.5); }
     50% { box-shadow:0 0 20px rgba(0,255,0,0.8); }
+}
+
+.connection-form {
+    background:rgba(255,255,255,0.1);
+    padding:20px;
+    border-radius:15px;
+    max-width:500px;
+    margin:20px auto;
+    backdrop-filter:blur(10px);
+    border:1px solid rgba(0,255,255,0.3);
+}
+
+.connection-form input {
+    width:calc(100% - 20px);
+    padding:10px;
+    margin:10px 0;
+    border-radius:8px;
+    border:1px solid rgba(0,255,255,0.4);
+    background:rgba(0,0,0,0.3);
+    color:white;
+    font-size:1rem;
+}
+
+.connection-form button {
+    background:linear-gradient(135deg, #00ffff, #0088ff);
+    color:#0a0f24;
+    padding:12px 30px;
+    border:none;
+    border-radius:25px;
+    font-weight:bold;
+    cursor:pointer;
+    margin:10px 5px;
+    font-size:1rem;
+    transition:all 0.3s ease;
+}
+
+.connection-form button:hover {
+    transform:translateY(-2px);
+    box-shadow:0 5px 20px rgba(0,255,255,0.5);
 }
 
 .grid{
@@ -142,14 +181,9 @@ h1{
     border:1px solid rgba(0,255,0,0.3);
 }
 
-.chart-container {
-    margin:30px auto;
-    max-width:900px;
-    background:rgba(255,255,255,0.08);
-    border-radius:18px;
-    padding:20px;
-    backdrop-filter:blur(10px);
-    border:1px solid rgba(0,255,255,0.2);
+.error {
+    background:rgba(255,0,0,0.15);
+    border:1px solid rgba(255,0,0,0.4);
 }
 
 .mini-chart {
@@ -183,6 +217,20 @@ h1{
     color:#88ccff;
 }
 
+.hidden {
+    display:none;
+}
+
+.note {
+    background:rgba(255,255,0,0.1);
+    border:1px solid rgba(255,255,0,0.3);
+    padding:15px;
+    border-radius:10px;
+    margin:20px auto;
+    max-width:600px;
+    color:#ffff88;
+}
+
 @media (max-width: 768px) {
     h1 { font-size:1.8rem; }
     .value { font-size:2.2rem; }
@@ -194,73 +242,95 @@ h1{
 <body>
 
 <div class="header">
-    <h1>🌡️ ESP32 Health Monitoring Dashboard</h1>
-    <p class="subtitle">Real-time Vital Signs & Environmental Data</p>
-    <div class="status-bar">
+    <h1>🌡️ ESP32 Health Monitor Output</h1>
+    <p class="subtitle">Real-time Data from Your Device</p>
+    <div class="status-bar" id="statusBar">
         <span class="status-dot"></span>
-        <span>System Online • Sensors Active</span>
+        <span id="statusText">Enter ESP32 IP Address</span>
     </div>
-    <div class="timestamp" id="timestamp">Loading...</div>
+    <div class="timestamp" id="timestamp">Not Connected</div>
 </div>
 
-<div class="grid">
-
-    <div class="card" id="bodyTempCard">
-        <div class="icon">🌡️</div>
-        <div class="label">Body Temperature</div>
-        <div class="value" id="bodyTemp">36.5<span class="unit">°C</span></div>
-        <div class="mini-chart" id="bodyTempChart"></div>
+<div class="connection-form" id="connectionForm">
+    <h3 style="margin-top:0;">Connect to Your ESP32</h3>
+    <input type="text" id="ipAddress" placeholder="Enter ESP32 IP (e.g., 192.168.1.100)" value="">
+    <br>
+    <button onclick="connectToESP32()">Connect</button>
+    <button onclick="toggleDemo()">Use Demo Data</button>
+    <div class="note" style="margin-top:15px; font-size:0.9rem;">
+        📌 Find your ESP32 IP address in the Serial Monitor (115200 baud)
     </div>
+</div>
 
-    <div class="card">
-        <div class="icon">🏠</div>
-        <div class="label">Room Temperature</div>
-        <div class="value" id="roomTemp">24.8<span class="unit">°C</span></div>
-        <div class="mini-chart" id="roomTempChart"></div>
-    </div>
+<div id="dashboard" class="hidden">
+    <div class="grid">
 
-    <div class="card">
-        <div class="icon">💧</div>
-        <div class="label">Humidity</div>
-        <div class="value" id="humidity">62<span class="unit">%</span></div>
-        <div class="mini-chart" id="humidityChart"></div>
-    </div>
-
-    <div class="card" id="bpmCard">
-        <div class="icon">❤️</div>
-        <div class="label">Heart Rate (BPM)</div>
-        <div class="value" id="bpm">78<span class="unit">BPM</span></div>
-        <div class="mini-chart" id="bpmChart"></div>
-    </div>
-
-    <div class="card" id="spo2Card">
-        <div class="icon">💨</div>
-        <div class="label">Blood Oxygen (SpO₂)</div>
-        <div class="value" id="spo2">98<span class="unit">%</span></div>
-        <div class="mini-chart" id="spo2Chart"></div>
-    </div>
-
-    <div class="card">
-        <div class="icon">📡</div>
-        <div class="label">Sensor Data (IR / RED)</div>
-        <div class="value" style="font-size:1.3rem;">
-            <div class="raw-data">IR: <span id="ir">87432</span></div>
-            <div class="raw-data">RED: <span id="red">45621</span></div>
+        <div class="card" id="bodyTempCard">
+            <div class="icon">🌡️</div>
+            <div class="label">Body Temperature</div>
+            <div class="value" id="bodyTemp">--<span class="unit">°C</span></div>
+            <div class="mini-chart" id="bodyTempChart"></div>
         </div>
+
+        <div class="card">
+            <div class="icon">🏠</div>
+            <div class="label">Room Temperature</div>
+            <div class="value" id="roomTemp">--<span class="unit">°C</span></div>
+            <div class="mini-chart" id="roomTempChart"></div>
+        </div>
+
+        <div class="card">
+            <div class="icon">💧</div>
+            <div class="label">Humidity</div>
+            <div class="value" id="humidity">--<span class="unit">%</span></div>
+            <div class="mini-chart" id="humidityChart"></div>
+        </div>
+
+        <div class="card" id="bpmCard">
+            <div class="icon">❤️</div>
+            <div class="label">Heart Rate (BPM)</div>
+            <div class="value" id="bpm">--<span class="unit">BPM</span></div>
+            <div class="mini-chart" id="bpmChart"></div>
+        </div>
+
+        <div class="card" id="spo2Card">
+            <div class="icon">💨</div>
+            <div class="label">Blood Oxygen (SpO₂)</div>
+            <div class="value" id="spo2">--<span class="unit">%</span></div>
+            <div class="mini-chart" id="spo2Chart"></div>
+        </div>
+
+        <div class="card">
+            <div class="icon">📡</div>
+            <div class="label">Sensor Data (IR / RED)</div>
+            <div class="value" style="font-size:1.3rem;">
+                <div class="raw-data">IR: <span id="ir">--</span></div>
+                <div class="raw-data">RED: <span id="red">--</span></div>
+            </div>
+        </div>
+
     </div>
 
+    <button onclick="disconnect()" style="background:linear-gradient(135deg, #ff4444, #cc0000); color:white; padding:12px 30px; border:none; border-radius:25px; font-weight:bold; cursor:pointer; margin-top:20px;">
+        Disconnect
+    </button>
 </div>
 
-<p class="footer">🔄 Data updates every second • Simulated real-time monitoring</p>
+<p class="footer">🔄 Data updates every second from your ESP32 device</p>
 
 <script>
+let updateInterval;
+let espIP = '';
+let demoMode = false;
+
 // Initialize chart bars
 function initChart(containerId, count = 15) {
     const container = document.getElementById(containerId);
+    container.innerHTML = '';
     for (let i = 0; i < count; i++) {
         const bar = document.createElement('div');
         bar.className = 'bar';
-        bar.style.height = Math.random() * 60 + 20 + 'px';
+        bar.style.height = '20px';
         container.appendChild(bar);
     }
 }
@@ -270,85 +340,155 @@ function updateChart(containerId, newValue, maxValue) {
     const container = document.getElementById(containerId);
     const bars = container.querySelectorAll('.bar');
     
-    // Shift existing bars
     for (let i = 0; i < bars.length - 1; i++) {
         bars[i].style.height = bars[i + 1].style.height;
     }
     
-    // Add new bar
     const percentage = (newValue / maxValue) * 60;
-    bars[bars.length - 1].style.height = percentage + 'px';
+    bars[bars.length - 1].style.height = Math.max(5, percentage) + 'px';
 }
 
 // Initialize all charts
-initChart('bodyTempChart', 20);
-initChart('roomTempChart', 20);
-initChart('humidityChart', 20);
-initChart('bpmChart', 20);
-initChart('spo2Chart', 20);
+function initAllCharts() {
+    initChart('bodyTempChart', 20);
+    initChart('roomTempChart', 20);
+    initChart('humidityChart', 20);
+    initChart('bpmChart', 20);
+    initChart('spo2Chart', 20);
+}
 
-// Simulate realistic sensor data
-function updateData() {
-    // Body Temperature (36-37.5°C)
-    const bodyTemp = (36 + Math.random() * 1.5).toFixed(1);
-    document.getElementById('bodyTemp').innerHTML = bodyTemp + '<span class="unit">°C</span>';
-    updateChart('bodyTempChart', parseFloat(bodyTemp), 40);
+// Connect to ESP32
+async function connectToESP32() {
+    const ip = document.getElementById('ipAddress').value.trim();
+    if (!ip) {
+        alert('Please enter an IP address');
+        return;
+    }
+
+    espIP = ip;
+    demoMode = false;
     
-    // Check body temp status
+    document.getElementById('connectionForm').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    document.getElementById('statusText').textContent = 'Connected to ' + espIP;
+    
+    initAllCharts();
+    
+    if (updateInterval) clearInterval(updateInterval);
+    updateInterval = setInterval(fetchData, 1000);
+    fetchData();
+}
+
+// Toggle demo mode
+function toggleDemo() {
+    demoMode = true;
+    espIP = 'demo';
+    
+    document.getElementById('connectionForm').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    document.getElementById('statusText').textContent = 'Demo Mode (Simulated Data)';
+    
+    initAllCharts();
+    
+    if (updateInterval) clearInterval(updateInterval);
+    updateInterval = setInterval(fetchData, 1000);
+    fetchData();
+}
+
+// Fetch data from ESP32
+async function fetchData() {
+    if (demoMode) {
+        // Demo data with realistic values
+        const data = {
+            bodyTemp: (36.2 + Math.random() * 1.2).toFixed(1),
+            roomTemp: (24 + Math.random() * 3).toFixed(1),
+            humidity: (58 + Math.random() * 10).toFixed(1),
+            bpm: Math.floor(78 + Math.random() * 15),
+            spo2: Math.floor(96 + Math.random() * 4),
+            ir: Math.floor(85000 + Math.random() * 10000),
+            red: Math.floor(44000 + Math.random() * 8000)
+        };
+        updateDisplay(data);
+    } else {
+        try {
+            const response = await fetch(`http://${espIP}/data`);
+            if (!response.ok) throw new Error('Connection failed');
+            
+            const data = await response.json();
+            updateDisplay(data);
+            
+            document.getElementById('statusBar').style.background = 'rgba(0,255,0,0.2)';
+            document.getElementById('statusBar').style.borderColor = 'rgba(0,255,0,0.4)';
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            document.getElementById('statusText').textContent = 'Connection Error - Retrying...';
+            document.getElementById('statusBar').style.background = 'rgba(255,0,0,0.2)';
+            document.getElementById('statusBar').style.borderColor = 'rgba(255,0,0,0.4)';
+        }
+    }
+}
+
+// Update display with data
+function updateDisplay(data) {
+    // Body Temperature
+    document.getElementById('bodyTemp').innerHTML = data.bodyTemp + '<span class="unit">°C</span>';
+    updateChart('bodyTempChart', parseFloat(data.bodyTemp), 40);
+    
     const bodyTempCard = document.getElementById('bodyTempCard');
-    if (parseFloat(bodyTemp) > 37.2) {
+    bodyTempCard.classList.remove('warning', 'normal', 'error');
+    if (parseFloat(data.bodyTemp) > 37.5) {
         bodyTempCard.classList.add('warning');
-        bodyTempCard.classList.remove('normal');
+    } else if (parseFloat(data.bodyTemp) < 35) {
+        bodyTempCard.classList.add('error');
     } else {
         bodyTempCard.classList.add('normal');
-        bodyTempCard.classList.remove('warning');
     }
 
-    // Room Temperature (22-27°C)
-    const roomTemp = (23 + Math.random() * 4).toFixed(1);
-    document.getElementById('roomTemp').innerHTML = roomTemp + '<span class="unit">°C</span>';
-    updateChart('roomTempChart', parseFloat(roomTemp), 35);
+    // Room Temperature
+    document.getElementById('roomTemp').innerHTML = data.roomTemp + '<span class="unit">°C</span>';
+    updateChart('roomTempChart', parseFloat(data.roomTemp), 40);
 
-    // Humidity (50-70%)
-    const humidity = Math.floor(55 + Math.random() * 15);
-    document.getElementById('humidity').innerHTML = humidity + '<span class="unit">%</span>';
-    updateChart('humidityChart', humidity, 100);
+    // Humidity
+    document.getElementById('humidity').innerHTML = data.humidity + '<span class="unit">%</span>';
+    updateChart('humidityChart', parseFloat(data.humidity), 100);
 
-    // Heart Rate (75-100 BPM)
-    const bpm = Math.floor(75 + Math.random() * 25);
-    document.getElementById('bpm').innerHTML = bpm + '<span class="unit">BPM</span>';
-    updateChart('bpmChart', bpm, 120);
-    
-    // Check BPM status
-    const bpmCard = document.getElementById('bpmCard');
-    if (bpm < 60 || bpm > 100) {
-        bpmCard.classList.add('warning');
-        bpmCard.classList.remove('normal');
+    // Heart Rate
+    const bpmValue = parseInt(data.bpm);
+    if (bpmValue > 0) {
+        document.getElementById('bpm').innerHTML = bpmValue + '<span class="unit">BPM</span>';
+        updateChart('bpmChart', bpmValue, 120);
+        
+        const bpmCard = document.getElementById('bpmCard');
+        bpmCard.classList.remove('warning', 'normal', 'error');
+        if (bpmValue < 60 || bpmValue > 100) {
+            bpmCard.classList.add('warning');
+        } else {
+            bpmCard.classList.add('normal');
+        }
     } else {
-        bpmCard.classList.add('normal');
-        bpmCard.classList.remove('warning');
+        document.getElementById('bpm').innerHTML = 'No Finger<span class="unit"></span>';
     }
 
-    // SpO2 (95-100%)
-    const spo2 = Math.floor(95 + Math.random() * 5);
-    document.getElementById('spo2').innerHTML = spo2 + '<span class="unit">%</span>';
-    updateChart('spo2Chart', spo2, 100);
-    
-    // Check SpO2 status
-    const spo2Card = document.getElementById('spo2Card');
-    if (spo2 < 95) {
-        spo2Card.classList.add('warning');
-        spo2Card.classList.remove('normal');
+    // SpO2
+    const spo2Value = parseInt(data.spo2);
+    if (spo2Value > 0) {
+        document.getElementById('spo2').innerHTML = spo2Value + '<span class="unit">%</span>';
+        updateChart('spo2Chart', spo2Value, 100);
+        
+        const spo2Card = document.getElementById('spo2Card');
+        spo2Card.classList.remove('warning', 'normal', 'error');
+        if (spo2Value < 95) {
+            spo2Card.classList.add('warning');
+        } else {
+            spo2Card.classList.add('normal');
+        }
     } else {
-        spo2Card.classList.add('normal');
-        spo2Card.classList.remove('warning');
+        document.getElementById('spo2').innerHTML = 'No Finger<span class="unit"></span>';
     }
 
-    // Raw IR/RED values
-    const ir = Math.floor(80000 + Math.random() * 20000);
-    const red = Math.floor(40000 + Math.random() * 15000);
-    document.getElementById('ir').textContent = ir;
-    document.getElementById('red').textContent = red;
+    // Raw sensor values
+    document.getElementById('ir').textContent = data.ir;
+    document.getElementById('red').textContent = data.red;
 
     // Update timestamp
     const now = new Date();
@@ -361,9 +501,16 @@ function updateData() {
     document.getElementById('timestamp').textContent = '🕐 Last Updated: ' + timeStr;
 }
 
-// Update every second
-setInterval(updateData, 1000);
-updateData();
+// Disconnect
+function disconnect() {
+    if (updateInterval) clearInterval(updateInterval);
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('connectionForm').classList.remove('hidden');
+    document.getElementById('statusText').textContent = 'Enter ESP32 IP Address';
+    document.getElementById('timestamp').textContent = 'Not Connected';
+    espIP = '';
+    demoMode = false;
+}
 </script>
 
 </body>
