@@ -37,6 +37,45 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
+        .config-section {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .config-section h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .config-section input {
+            width: 100%;
+            padding: 12px;
+            font-size: 1rem;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .config-section button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .config-section button:hover {
+            background: #764ba2;
+        }
+
         .last-update {
             font-size: 0.9rem;
             opacity: 0.9;
@@ -166,6 +205,7 @@
             font-weight: 600;
             font-size: 0.9rem;
             box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
         }
 
         .connected {
@@ -219,6 +259,16 @@
             <h1>🏥 Health Monitoring System</h1>
             <p class="last-update">Last Updated: <span id="lastUpdate">--</span></p>
         </header>
+
+        <!-- ESP32 IP Configuration -->
+        <div class="config-section">
+            <h3>⚙️ ESP32 Configuration</h3>
+            <input type="text" id="esp32IP" placeholder="Enter ESP32 IP Address (e.g., 192.168.1.100)" value="">
+            <button onclick="saveIP()">💾 Save IP Address</button>
+            <p style="margin-top: 10px; color: #666; font-size: 0.9rem;">
+                📌 Check Serial Monitor for ESP32 IP after uploading code
+            </p>
+        </div>
 
         <div class="dashboard">
             <!-- Body Temperature -->
@@ -292,7 +342,7 @@
                     <div class="icon">📡</div>
                     <div class="card-title">Sensor Status</div>
                 </div>
-                <div class="card-value" style="font-size: 1.5rem;" id="sensorStatus">Initializing...</div>
+                <div class="card-value" style="font-size: 1.5rem;" id="sensorStatus">Configure IP First</div>
                 <div class="alert" id="sensorAlert" style="margin-top: 20px;"></div>
             </div>
         </div>
@@ -306,7 +356,27 @@
     <script>
         let autoRefreshEnabled = false;
         let autoRefreshInterval;
-        const ESP32_IP = "192.168.4.1"; // Default ESP32 AP IP
+        let ESP32_IP = localStorage.getItem('esp32_ip') || '';
+
+        // Load saved IP on page load
+        window.onload = function() {
+            if (ESP32_IP) {
+                document.getElementById('esp32IP').value = ESP32_IP;
+                setTimeout(fetchData, 1000);
+            }
+        };
+
+        function saveIP() {
+            const ipInput = document.getElementById('esp32IP').value.trim();
+            if (ipInput) {
+                ESP32_IP = ipInput;
+                localStorage.setItem('esp32_ip', ESP32_IP);
+                alert('✅ IP Address Saved: ' + ESP32_IP);
+                fetchData();
+            } else {
+                alert('⚠️ Please enter a valid IP address');
+            }
+        }
 
         function updateStatus(connected) {
             const statusEl = document.getElementById('connectionStatus');
@@ -330,15 +400,15 @@
         }
 
         function updateCard(value, elementId, barId, alertId, min, max, normalMin, normalMax, type) {
-            document.getElementById(elementId).innerHTML = value + '<span class="card-unit">' + 
+            document.getElementById(elementId).innerHTML = value.toFixed(1) + '<span class="card-unit">' + 
                 (type === 'BPM' ? ' BPM' : type === '%' ? '%' : '°C') + '</span>';
             
             const percentage = ((value - min) / (max - min)) * 100;
             const bar = document.getElementById(barId);
-            bar.style.width = percentage + '%';
+            bar.style.width = Math.min(100, Math.max(0, percentage)) + '%';
             
             const alert = getAlert(value, min, max, normalMin, normalMax, 
-                type === 'BPM' ? 'Heart Rate' : type === '%' ? 'SpO2/Humidity' : 'Temperature');
+                type === 'BPM' ? 'Heart Rate' : type === '%' ? 'Level' : 'Temperature');
             
             const alertEl = document.getElementById(alertId);
             alertEl.className = 'alert ' + alert.class;
@@ -354,28 +424,30 @@
         }
 
         async function fetchData() {
+            if (!ESP32_IP) {
+                alert('⚠️ Please enter ESP32 IP address first!');
+                return;
+            }
+
             try {
-                const response = await fetch(`http://${ESP32_IP}/`);
+                const response = await fetch(`http://${ESP32_IP}/data`);
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                
                 updateStatus(true);
-                
-                const html = await response.text();
-                
-                // Parse HTML to extract values
-                const bodyTemp = parseFloat(html.match(/Body Temperature: ([\d.]+)/)?.[1] || 0);
-                const roomTemp = parseFloat(html.match(/Room Temperature: ([\d.]+)/)?.[1] || 0);
-                const humidity = parseFloat(html.match(/Humidity: ([\d.]+)/)?.[1] || 0);
-                const heartRate = parseInt(html.match(/Heart Rate: (\d+)/)?.[1] || 0);
-                const spo2 = parseInt(html.match(/SpO2: (\d+)/)?.[1] || 0);
+                const data = await response.json();
                 
                 // Update all cards
-                updateCard(bodyTemp, 'bodyTemp', 'bodyTempBar', 'bodyTempAlert', 30, 42, 36, 37.5, '°C');
-                updateCard(roomTemp, 'roomTemp', 'roomTempBar', 'roomTempAlert', 15, 40, 20, 26, '°C');
-                updateCard(humidity, 'humidity', 'humidityBar', 'humidityAlert', 0, 100, 30, 60, '%');
-                updateCard(heartRate, 'heartRate', 'heartRateBar', 'heartRateAlert', 40, 150, 60, 100, 'BPM');
-                updateCard(spo2, 'spo2', 'spo2Bar', 'spo2Alert', 80, 100, 95, 100, '%');
+                updateCard(data.bodyTemp, 'bodyTemp', 'bodyTempBar', 'bodyTempAlert', 30, 42, 36, 37.5, '°C');
+                updateCard(data.roomTemp, 'roomTemp', 'roomTempBar', 'roomTempAlert', 15, 40, 20, 26, '°C');
+                updateCard(data.humidity, 'humidity', 'humidityBar', 'humidityAlert', 0, 100, 30, 60, '%');
+                updateCard(data.heartRate, 'heartRate', 'heartRateBar', 'heartRateAlert', 40, 150, 60, 100, 'BPM');
+                updateCard(data.spo2, 'spo2', 'spo2Bar', 'spo2Alert', 80, 100, 95, 100, '%');
                 
                 // Update sensor status
-                if (heartRate > 0) {
+                if (data.heartRate > 0 && data.irValue > 50000) {
                     document.getElementById('sensorStatus').textContent = '✓ All Sensors Active';
                     document.getElementById('sensorAlert').className = 'alert alert-normal';
                     document.getElementById('sensorAlert').textContent = '📊 Real-time monitoring active';
@@ -392,11 +464,16 @@
                 console.error('Error fetching data:', error);
                 document.getElementById('sensorStatus').textContent = '❌ Connection Error';
                 document.getElementById('sensorAlert').className = 'alert alert-danger';
-                document.getElementById('sensorAlert').textContent = 'Cannot connect to ESP32. Check WiFi connection.';
+                document.getElementById('sensorAlert').textContent = 'Cannot connect to ESP32 at ' + ESP32_IP;
             }
         }
 
         function toggleAutoRefresh() {
+            if (!ESP32_IP) {
+                alert('⚠️ Please enter ESP32 IP address first!');
+                return;
+            }
+
             autoRefreshEnabled = !autoRefreshEnabled;
             const btn = document.getElementById('autoRefreshBtn');
             
@@ -409,9 +486,6 @@
                 clearInterval(autoRefreshInterval);
             }
         }
-
-        // Initial fetch
-        setTimeout(fetchData, 1000);
     </script>
 </body>
 </html>
